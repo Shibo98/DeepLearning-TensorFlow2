@@ -1,13 +1,15 @@
-"""
-author: AI JUN
-function: LeNet-5 by python
-date: 2020/3/26
-"""
 import tensorflow as tf  # 导入TF库
 from tensorflow.keras import layers, optimizers, datasets, Sequential, metrics  # 导入TF子库
+
 import os, glob
 import random, csv
 import matplotlib.pyplot as plt
+
+'''config = tf.compat.v1.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.5
+tf.compat.v1.keras.backend.set_session(tf.compat.v1.Session(config=config))
+'''
+
 
 # 创建图片路径和标签，并写入csv文件
 def load_csv(root, filename, name2label):
@@ -22,7 +24,7 @@ def load_csv(root, filename, name2label):
             images += glob.glob(os.path.join(root, name, '*.png'))
             images += glob.glob(os.path.join(root, name, '*.jpg'))
             images += glob.glob(os.path.join(root, name, '*.jpeg'))
-        print(len(images), images)  # 打印出images的长度和所有图片路径名
+        print('############',len(images), images)  # 打印出images的长度和所有图片路径名
         random.shuffle(images)  # 随机打乱存放顺序
         # 创建csv文件，并且写入图片路径和标签信息
         with open(os.path.join(root, filename), mode='w', newline='') as f:
@@ -52,6 +54,7 @@ def load_pokemon(root, mode='train'):
         if not os.path.isdir(os.path.join(root, name)):  # 如果不是文件夹，则跳过
             continue
         name2label[name] = len(name2label.keys())   # 给每个类别编码一个数字
+    #print('###############',name2label)
     images, labels = load_csv(root, 'images.csv', name2label)  # 读取csv文件中已经写好的图片路径，和对应的标签
     # 将数据集按6：2：2的比例分成训练集、验证集、测试集
     if mode == 'train':  # 60%
@@ -91,61 +94,70 @@ def preprocess(image_path, label):
     return x, y
 
 # 1.加载自定义数据集
-images, labels, table = load_pokemon('pokemon', 'train')
+images, labels, table = load_pokemon('.\pokemon', 'train')
 print('images', len(images), images)
 print('labels', len(labels), labels)
 print(table)
 db = tf.data.Dataset.from_tensor_slices((images, labels))  # images: string path， labels: number
-db = db.shuffle(1000).map(preprocess).batch(32).repeat(20)
+db = db.shuffle(1000).map(preprocess).batch(64).repeat(20)
 
-# 2.网络搭建
-network = Sequential([
-    # 第一层
-    layers.Conv2D(48, kernel_size=11, strides=4, padding=[[0, 0], [2, 2], [2, 2], [0, 0]], activation='relu'),  # 55*55*48
-    layers.MaxPooling2D(pool_size=3, strides=2),  # 27*27*48
-    # 第二层
-    layers.Conv2D(128, kernel_size=5, strides=1, padding=[[0, 0], [2, 2], [2, 2], [0, 0]], activation='relu'),  # 27*27*128
-    layers.MaxPooling2D(pool_size=3, strides=2),  # 13*13*128
-    # 第三层
-    layers.Conv2D(192, kernel_size=3, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]], activation='relu'),  # 13*13*192
-    # 第四层
-    layers.Conv2D(192, kernel_size=3, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]], activation='relu'),  # 13*13*192
-    # 第五层
-    layers.Conv2D(128, kernel_size=3, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]], activation='relu'),  # 13*13*128
-    layers.MaxPooling2D(pool_size=3, strides=2),  # 6*6*128
-    layers.Flatten(),  # 6*6*128=4608
-    # 第六层
-    layers.Dense(1024, activation='relu'),
-    layers.Dropout(rate=0.5),
-    # 第七层
-    layers.Dense(128, activation='relu'),
-    layers.Dropout(rate=0.5),
-    # 第八层（输出层）
-    layers.Dense(5)
-])
-network.build(input_shape=(32, 224, 224, 3))  # 设置输入格式
-network.summary()
+with tf.device('/gpu:0'):
+    # 2.网络搭建
+    network = Sequential([
+        # 第一层
+        layers.Conv2D(48, kernel_size=11, strides=4, padding=[[0, 0], [2, 2], [2, 2], [0, 0]], activation='relu'),  # 55*55*48
+        layers.MaxPooling2D(pool_size=3, strides=2),  # 27*27*48
+        # 第二层
+        layers.Conv2D(128, kernel_size=5, strides=1, padding=[[0, 0], [2, 2], [2, 2], [0, 0]], activation='relu'),  # 27*27*128
+        layers.MaxPooling2D(pool_size=3, strides=2),  # 13*13*128
+        # 第三层
+        layers.Conv2D(192, kernel_size=3, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]], activation='relu'),  # 13*13*192
+        # 第四层
+        layers.Conv2D(192, kernel_size=3, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]], activation='relu'),  # 13*13*192
+        # 第五层
+        layers.Conv2D(128, kernel_size=3, strides=1, padding=[[0, 0], [1, 1], [1, 1], [0, 0]], activation='relu'),  # 13*13*128
+        layers.MaxPooling2D(pool_size=3, strides=2),  # 6*6*128
+        layers.Flatten(),  # 6*6*128=4608
+        # 第六层
+        layers.Dense(1024, activation='relu'),
+        layers.Dropout(rate=0.5),
+        # 第七层
+        layers.Dense(128, activation='relu'),
+        layers.Dropout(rate=0.5),
+        # 第八层（输出层）
+        layers.Dense(5)
+    ])
+    network.build(input_shape=(32, 224, 224, 3))  # 设置输入格式
+    network.summary()
 
-# 3.模型训练（计算梯度，迭代更新网络参数）
-optimizer = optimizers.SGD(lr=0.01)  # 声明采用批量随机梯度下降方法，学习率=0.01
-acc_meter = metrics.Accuracy()
-x_step = []
-y_accuracy = []
-for step, (x, y) in enumerate(db):  # 一次输入batch组数据进行训练
-    with tf.GradientTape() as tape:  # 构建梯度记录环境
-        x = tf.reshape(x, (-1, 224, 224, 3))  # 将输入拉直，[b,28,28]->[b,784]
-        out = network(x)  # 输出[b, 10]
-        y_onehot = tf.one_hot(y, depth=5)  # one-hot编码
-        loss = tf.square(out - y_onehot)
-        loss = tf.reduce_sum(loss)/32  # 定义均方差损失函数，注意此处的32对应为batch的大小
-        grads = tape.gradient(loss, network.trainable_variables)  # 计算网络中各个参数的梯度
-        optimizer.apply_gradients(zip(grads, network.trainable_variables))  # 更新网络参数
-        acc_meter.update_state(tf.argmax(out, axis=1), y)  # 比较预测值与标签，并计算精确度
-    if step % 10 == 0:  # 每200个step，打印一次结果
-        print('Step', step, ': Loss is: ', float(loss), ' Accuracy: ', acc_meter.result().numpy())
-        x_step.append(step)
-        y_accuracy.append(acc_meter.result().numpy())
-        acc_meter.reset_states()
+    # 3.模型训练（计算梯度，迭代更新网络参数）
+    optimizer = optimizers.SGD(lr=0.01)  # 声明采用批量随机梯度下降方法，学习率=0.01
+    acc_meter = metrics.Accuracy()
+    x_step = []
+    y_accuracy = []
+
+    '''# 获取运算列表
+    gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
+    
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu,True)'''
+
+
+    for step, (x, y) in enumerate(db):  # 一次输入batch组数据进行训练
+        with tf.GradientTape() as tape:  # 构建梯度记录环境
+            x = tf.reshape(x, (-1, 224, 224, 3))  # 将输入拉直，[b,28,28]->[b,784]
+            out = network(x)  # 输出[b, 10]
+            y_onehot = tf.one_hot(y, depth=5)  # one-hot编码
+            loss = tf.square(out - y_onehot)
+            loss = tf.reduce_sum(loss)/32  # 定义均方差损失函数，注意此处的32对应为batch的大小
+            grads = tape.gradient(loss, network.trainable_variables)  # 计算网络中各个参数的梯度
+            optimizer.apply_gradients(zip(grads, network.trainable_variables))  # 更新网络参数
+            acc_meter.update_state(tf.argmax(out, axis=1), y)  # 比较预测值与标签，并计算精确度
+        if step % 10 == 0:  # 每200个step，打印一次结果
+            print('Step', step, ': Loss is: ', float(loss), ' Accuracy: ', acc_meter.result().numpy())
+            x_step.append(step)
+            y_accuracy.append(acc_meter.result().numpy())
+            acc_meter.reset_states()
 
 # 4.可视化
 plt.plot(x_step, y_accuracy, label="training")
@@ -154,3 +166,6 @@ plt.ylabel("accuracy")
 plt.title("accuracy of training")
 plt.legend()
 plt.show()
+
+# 5.模型保存
+network.save('Pokemon.h5')
